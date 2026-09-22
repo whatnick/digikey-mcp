@@ -8,4 +8,7 @@ dependencies = [
     "requests",
     "python-dotenv",
 ]
-requires-python = ">=3.10" 
+requires-python = ">=3.10"
+
+[tool.setuptools]
+py-modules = ["digikey_mcp_server", "digikey_noauth_tools", "mcp_app"]

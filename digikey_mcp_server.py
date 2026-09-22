@@ -79,6 +79,7 @@ def _get_headers(customer_id: str = "0"):
         "X-DIGIKEY-Locale-Currency": os.getenv("DIGIKEY_LOCALE_CURRENCY", "USD"),
         "X-DIGIKEY-Customer-Id": customer_id,
     }
+    headers["Authorization"] = f"Bearer {token}"
     if ACCOUNT_ID:
         headers["X-DIGIKEY-Account-Id"] = ACCOUNT_ID
     return headers
