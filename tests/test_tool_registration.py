@@ -8,7 +8,7 @@ from digikey_mcp_server import mcp
 
 
 def test_all_tools_registered():
-    tool_names = list(asyncio.run(mcp.get_tools()).keys())
+    tool_names = [tool.name for tool in asyncio.run(mcp.list_tools())]
     # Existing tools
     assert "keyword_search" in tool_names
     assert "product_details" in tool_names

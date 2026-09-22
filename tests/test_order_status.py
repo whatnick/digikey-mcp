@@ -13,7 +13,7 @@ def test_list_orders_default_params():
 
     with patch("digikey_mcp_server._ensure_token", return_value="fake_token"), \
          patch("digikey_mcp_server.requests.get", return_value=mock_resp) as mock_get:
-        result = list_orders.fn()
+        result = list_orders()
 
     call_url = mock_get.call_args[0][0]
     assert f"{API_BASE}/orderstatus/v4/orders" in call_url
@@ -28,7 +28,7 @@ def test_list_orders_with_dates():
 
     with patch("digikey_mcp_server._ensure_token", return_value="fake_token"), \
          patch("digikey_mcp_server.requests.get", return_value=mock_resp) as mock_get:
-        list_orders.fn(start_date="2026-01-01", end_date="2026-02-01")
+        list_orders(start_date="2026-01-01", end_date="2026-02-01")
 
     call_url = mock_get.call_args[0][0]
     assert "StartDate=2026-01-01" in call_url
@@ -42,7 +42,7 @@ def test_get_order_status():
 
     with patch("digikey_mcp_server._ensure_token", return_value="fake_token"), \
          patch("digikey_mcp_server.requests.get", return_value=mock_resp) as mock_get:
-        result = get_order_status.fn(12345)
+        result = get_order_status(12345)
 
     call_url = mock_get.call_args[0][0]
     assert f"{API_BASE}/orderstatus/v4/salesorder/12345" in call_url
