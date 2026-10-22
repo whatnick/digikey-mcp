@@ -4,6 +4,8 @@ import logging
 from urllib.parse import urlencode, quote
 from dotenv import load_dotenv
 import requests
+import time
+import argparse
 
 from mcp_app import mcp  # shared FastMCP instance (avoids __main__ double-import)
 import digikey_noauth_tools  # noqa: E402, F401 — registers no-auth tools on mcp
@@ -51,17 +53,28 @@ def get_access_token():
         logger.error(f"OAuth error: {resp.status_code} - {resp.text}")
         resp.raise_for_status()
     
-    logger.info("Successfully obtained access token")
-    return resp.json()["access_token"]
+    # Track expiry: DigiKey bearer tokens are short-lived (expires_in was 599 s
+    # when measured), so the token must be refreshed instead of being cached for
+    # the lifetime of the process.
+    global access_token, _token_expiry
+    payload = resp.json()
+    access_token = payload["access_token"]
+    ttl = float(payload.get("expires_in", 1800))
+    _token_expiry = time.time() + ttl
+    logger.info(f"Successfully obtained access token (expires_in={ttl:.0f}s)")
+    return access_token
 
 # Lazy token initialization — deferred to first tool call so FastMCP can
 # register tools with the gateway even if OAuth credentials are missing.
 logger.info("=== STARTING DIGIKEY MCP SERVER ===")
 access_token = None
+_token_expiry = 0.0
 
-def _ensure_token():
-    global access_token
-    if access_token is None:
+def _ensure_token(force: bool = False):
+    """Return a valid bearer token, refreshing it when it has expired."""
+    global access_token, _token_expiry
+    # Refresh a minute early so a request never races the expiry.
+    if force or access_token is None or time.time() >= _token_expiry - 60:
         access_token = get_access_token()
     return access_token
 
@@ -95,6 +108,15 @@ def _make_request(method: str, url: str, headers: dict, data: dict | None = None
     else:
         resp = requests.post(url, headers=headers, json=data)
     
+    if resp.status_code == 401:
+        logger.warning("401 Unauthorized — refreshing bearer token and retrying once")
+        _ensure_token(force=True)
+        headers = dict(headers, Authorization=f"Bearer {access_token}")
+        if method.upper() == "GET":
+            resp = requests.get(url, headers=headers)
+        else:
+            resp = requests.post(url, headers=headers, json=data)
+
     logger.info(f"Response status: {resp.status_code}")
     if resp.status_code != 200:
         logger.error(f"API error: {resp.status_code} - {resp.text}")
@@ -286,7 +308,26 @@ def get_order_status(sales_order_id: int) -> dict:
 
 
 def main():
-    mcp.run()
+    parser = argparse.ArgumentParser(description="DigiKey MCP Server")
+    parser.add_argument("--host", help="Host to bind (enables HTTP mode)")
+    parser.add_argument("--port", type=int, help="Port to bind (enables HTTP mode)")
+    parser.add_argument(
+        "--transport",
+        default="streamable-http",
+        choices=["streamable-http", "sse"],
+        help="HTTP transport when --host/--port is given (default: streamable-http)",
+    )
+    args = parser.parse_args()
+
+    if args.host or args.port:
+        mcp.run(
+            transport=args.transport,
+            host=args.host or "127.0.0.1",
+            port=args.port or 8003,
+        )
+    else:
+        mcp.run()  # stdio (default)
+
 
 if __name__ == "__main__":
-    main() 
+    main()
